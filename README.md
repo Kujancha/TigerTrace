@@ -1,14 +1,30 @@
-# Tiger Re-identification: ViT Loss Comparison
+# Tiger Re-Identification with Vision Transformers
 
-A reproducible comparison of **batch-hard Triplet**, **Multi-Similarity**, and **Proxy Anchor** for tiger re-identification. A pretrained ViT-Base is fine-tuned to produce compact 128D identity embeddings, with a fixed dataset protocol and three training seeds per method.
+**A comparative study of metric-learning loss functions for individual tiger identification.**
 
-One research entry point, from raw annotations to comparison figures (optional Gradio demo below):
+This project evaluates **Batch-Hard Triplet Loss**, **Multi-Similarity Loss**, and **Proxy Anchor Loss** using a fine-tuned Vision Transformer (ViT-Base). Each model learns 128-dimensional embeddings for image retrieval: photographs of the same tiger should have similar embeddings, while different individuals should be distinguishable.
+
+The experiments share a fixed identity-disjoint dataset split, evaluation protocol, and training configuration. Each loss is evaluated across three random seeds. The repository also includes a local Gradio application for identifying and registering tigers against a persistent reference gallery.
+
+**Research workflow:** prepare and audit ATRW data → create a fixed split → train models → evaluate retrieval → compare results. The Gradio application is optional and uses an existing trained checkpoint.
 
 ```powershell
 python run.py --help
 ```
 
-## 1. Download the dataset first
+## Contents
+
+- [Dataset](#dataset)
+- [Installation](#installation)
+- [Data preparation and splits](#data-preparation-and-splits)
+- [Training](#training)
+- [Evaluation and results](#evaluation-and-results)
+- [Gradio demo](#gradio-demo)
+- [Repository layout](#repository-layout)
+- [Testing and reproducibility](#testing-and-reproducibility)
+- [References](#references)
+
+## Dataset
 
 Download **all four Re-identification archives** from the [ATRW dataset page on LILA BC](https://lila.science/datasets/atrw):
 
@@ -41,7 +57,7 @@ Images can also be in nested subfolders under `train/` or `test/`; their basenam
 
 No dataset, annotation archive, pretrained weights, or user checkpoints are distributed with this repository. Follow the dataset publisher's [CC BY-NC-SA 4.0 terms](https://lila.science/datasets/atrw) and citation instructions.
 
-## 2. Set up Python and GPU dependencies
+## Installation
 
 If your existing environment already trains successfully on your NVIDIA GPU, keep using it. For a new environment, Python 3.11 or 3.12 is recommended (the code supports Python >=3.10 with compatible PyTorch wheels).
 
@@ -66,7 +82,9 @@ Confirm `CUDA available: True`. If PowerShell activation is unavailable, use `.\
 
 The named timm pretrained checkpoint downloads on first model use if not cached. It requires internet access. Training and final inference run locally.
 
-## 3. Prepare and audit the raw files
+## Data preparation and splits
+
+### Prepare and audit the dataset
 
 ```powershell
 python run.py prepare
@@ -84,7 +102,7 @@ Read the generated `audit.json` files. Missing/corrupt images, ambiguous names, 
 
 Once preparation is complete, skip this command on later runs. Existing prepared copies are not silently overwritten. Use `--train-only` or `--test-only` to prepare only one side if needed.
 
-## 4. Create the fixed experiment split
+### Create the experiment split
 
 ```powershell
 python run.py split
@@ -104,7 +122,9 @@ Review `gallery_query_review.csv` and `near_duplicate_candidates.csv` before tra
 
 Do not rerun splitting to get more favorable results. The same assignments are used for every loss and training seed. Details are in [docs/protocol.md](docs/protocol.md).
 
-## 5. Check the GPU with a pilot
+## Training
+
+### Pilot run
 
 ```powershell
 python run.py pilot
@@ -114,7 +134,7 @@ The pilot runs all three losses, seed 42, two epochs and five batches per epoch.
 
 Default batch size is 4 identities x 2 distinct images = 8, at 224x224 resolution. If you encounter an out-of-memory error, close other GPU applications and retry in a fresh work directory with `--checkpointing` or a smaller `--p 2 --k 2`. Use the same chosen settings for every method in the final comparison. See [docs/usage.md](docs/usage.md).
 
-## 6. Run the baseline and full training
+### Baseline and full experiments
 
 ```powershell
 python run.py baseline
@@ -135,7 +155,7 @@ python run.py train --resume
 
 Repeat any options from the original command. Completed runs are skipped; an interrupted run resumes after the last fully checkpointed epoch. Source, settings, manifest and environment must match. A partial epoch is rerun. Runs interrupted before their first checkpoint need a new output directory. Allow roughly 10–15 GB for nine runs' model/optimizer checkpoints; actual usage varies.
 
-## 7. Evaluate and create the comparison
+## Evaluation and results
 
 After fixing training decisions and completing all runs:
 
@@ -161,81 +181,101 @@ The comparison is saved in **`artifacts/comparison/`**:
 
 Use `python run.py compare` without `--examples` if only regenerated tables/plots are needed. No model retraining or repeated inference is needed to regenerate figures from a complete evaluation directory.
 
-## 8. Optional Gradio identification demo
+## Gradio demo
 
-Already trained? **Do not rerun training.** Use an existing `best.pt` from this project's runs. The demo adds a local, persistent gallery without changing any training or evaluation outputs. It expects cropped tiger photographs; it is not an animal detector.
+The optional Gradio app provides an interactive way to query a local reference database, inspect matches, register new images, and run identification on a directory of photographs. It uses the same trained `TigerViT` architecture and preprocessing as the experiment pipeline; **launching the demo does not retrain the model or alter the research results**.
 
-Install the one optional UI dependency in the same Python environment (tested with Gradio 6.31.0):
+The interface follows the original Tiger Identification demo's minimalist dark design and is organized into four tabs: **Setup**, **Identify**, **Batch**, and **Info**.
+
+### Launch
+
+Install Gradio in the same environment as the project:
 
 ```powershell
 python -m pip install "gradio>=6,<7"
 ```
 
-Launch from the project folder (replace the checkpoint path with your chosen run):
+From the repository root, launch the demo with an existing `best.pt` checkpoint:
 
 ```powershell
 python demo.py --checkpoint artifacts/runs/proxy_anchor_seed42/best.pt
 ```
 
-Open **http://127.0.0.1:7860** if the browser does not open automatically. CUDA is used when available, with CPU fallback. Override with `--device cpu` or change a busy port with `--port 7861`. Paths are relative to the project folder, or you can pass absolute paths. The app binds only to the local computer and does not create a public sharing link. Only load your own trusted study checkpoints; no `.pkl` conversion is needed.
+Gradio opens locally at [http://127.0.0.1:7860](http://127.0.0.1:7860). Use `--device cpu` to force CPU inference or `--port 7861` if the default port is occupied. The server is bound to `127.0.0.1` and does not create a public sharing link. Only load checkpoints you trust.
 
-### Build your known-tiger database
+### Setup: load or build the reference database
 
-1. Open **Manage gallery** and choose **train**.
-2. Click **Import reference images**. The progress bar tracks embedding extraction. Identity labels and paths come from `artifacts/experiment/manifest.json`, with image files under `artifacts/prepared/train`. The manifest must match the checkpoint's original manifest byte for byte.
-3. Open **Identify & register**, upload a different tiger photograph, and click **Find top 3 tigers**.
-4. The app shows up to three **distinct identities**, each identity's best matching reference image, and its cosine similarity. With fewer than three registered identities, fewer results are shown.
-5. If the best cosine is below the threshold, the app reports **No confident match — possibly an unregistered tiger**. This is not proof that the tiger is new.
-6. To enroll an animal, enter a new ID, review the candidates, tick the confirmation box, and click **Save reference to gallery**. To add another photograph of a known tiger, select **Existing tiger** and enter that exact ID. Enrollment is allowed after review whether or not the threshold accepted the match.
+The application stores registered identities, reference images, and normalized embeddings in a SQLite database at:
 
-The database is `artifacts/demo/gallery.sqlite3`. It stores IDs, reference images, normalized 128D embeddings, and a checkpoint fingerprint. It persists across restarts. No training is performed during enrollment. Exact decoded-image duplicates are skipped; conflicting labels are rejected. The gallery tab can remove an incorrectly registered identity and all its references, after confirmation. Back up the database while the app is closed. Do not run multiple app processes against the same database.
+```text
+artifacts/demo/gallery.sqlite3
+```
 
-All generated demo data stays inside the already-ignored `artifacts/` directory. A different model needs a new database because embeddings from different checkpoints must not be mixed:
+The database persists between launches. **Load Existing Database** refreshes its inventory; it does not import or recompute embeddings. For a new database, choose a **Reference source** and click **Build Database from Images**:
+
+| Reference source | Images imported |
+|---|---|
+| `test-gallery` (default) | Gallery-role images from the custom held-out split; query-role images are excluded |
+| `train` | Labeled training images from the experiment split |
+
+Imports use `artifacts/experiment/manifest.json` and images stored under `artifacts/prepared/train/`. The manifest must match the manifest associated with the checkpoint. This workflow **does not scan arbitrary `data/reference/` identity folders** as the original project did.
+
+You can enter comma-separated exact identities in **IDs to withhold (optional)** before importing. This is useful for a known-versus-unknown demonstration. The import is additive; choosing a different source does not clear existing records. If an identity is already registered, it cannot be withheld retroactively without first deleting it or starting a fresh database.
+
+The **Setup** tab also shows the current identity inventory. To remove a tiger, choose its ID, tick the deletion confirmation, and click **Delete Tiger**. This removes its gallery records, not the source dataset files.
+
+### Identify: match and register a tiger
+
+In the **Identify** tab, upload a cropped tiger photograph and click **Identify**. The application extracts a 128-dimensional embedding, compares it with registered references using cosine similarity, and takes the **highest score per identity**. It displays the three strongest distinct candidates in the result text, plus an expandable gallery of their best reference images.
+
+When the leading score is at least **0.96**, the result is **MATCH FOUND** and the reference photographs of that identity appear below the result. Otherwise the app displays **NEW TIGER DETECTED**. This means only that **no registered identity passed the threshold**; it is not proof that the animal is new.
+
+To register the uploaded photograph, enter a **Tiger name / ID**, review the results, tick the confirmation checkbox, and click **Add Tiger to Database**. An existing ID receives an additional reference image; an unused ID creates a new identity. The application skips exact duplicate images and rejects conflicting labels. Enrollment updates the SQLite gallery only; it does not update model weights.
+
+### Batch: identify a directory of images
+
+The **Batch** tab runs the same embedding and matching procedure on supported image files under a local directory, including subdirectories. The default query path is `data/test`, which you can change in the interface. Click **Run Batch** to see the predicted identity (or **NEW TIGER**) and cosine similarity for each image. Individual files that cannot be processed are reported as errors rather than stopping the whole batch.
+
+### Threshold and evaluation caveats
+
+The demo uses a **fixed cosine-similarity threshold of 0.96**, restored from the original interface. This threshold is *not calibrated for the new model or its loss functions*. The displayed percentages represent cosine similarities, **not confidence probabilities**. Different loss functions may produce different score distributions even when they use the same embedding dimension.
+
+For a meaningful unknown-identity experiment, use a fresh database and import `test-gallery` while withholding one or more held-out IDs. Query a separate image of a registered tiger, then one from a withheld identity. If you register that identity, evaluate it with a **different** photograph. An exact registered-image query is flagged as a self-match and must not be treated as independent evidence of recognition performance.
+
+The gallery is a mutable demonstration database, separate from the fixed train/validation/test experiment. Use the evaluation pipeline—not the demo's threshold decisions—for Rank-1, mAP, CMC, and comparative loss-function results. Calibrating an unknown-detection threshold would require validation identities divided into known and withheld groups, with false-accept and false-reject rates reported.
+
+### Database and checkpoint options
+
+Different checkpoints should use **different SQLite databases**. The database stores a checkpoint fingerprint and preprocessing signature to prevent mixing incompatible embeddings.
 
 ```powershell
 python demo.py --checkpoint artifacts/runs/multi_similarity_seed42/best.pt --database artifacts/demo/multi_similarity.sqlite3
 ```
 
-To use existing artifacts elsewhere:
+If experiment artifacts live elsewhere, provide their paths explicitly:
 
 ```powershell
 python demo.py --checkpoint "D:\old-project\runs\proxy_anchor_seed42\best.pt" --manifest "D:\old-project\experiment\manifest.json" --prepared-root "D:\old-project\prepared\train" --database artifacts/demo/gallery.sqlite3
 ```
 
-Use the directory that actually contains the manifest's relative image paths for `--prepared-root`. See [migration instructions](docs/migration.md) if you are moving the previous study outputs.
+The `--prepared-root` path must be the root relative to which manifest image paths are resolved. Back up the database while the application is closed, and avoid running multiple demo processes against the same database. See [migration guidance](docs/migration.md) for moving existing experiment outputs.
 
-### A stronger presentation: known and unknown tigers
-
-Use a fresh database, e.g. `--database artifacts/demo/heldout.sqlite3`. In **Manage gallery**, choose **test-gallery**. This uses only the gallery-role images from the custom held-out split within the labeled training pool, not the official unlabeled test archive. Query-role images are never imported by this option.
-
-Enter one or more exact manifest IDs in **IDs to withhold**, separated by commas. Choose IDs from `identity_splits.test` in your manifest. The importer refuses to withhold an identity already present in the database; remove it or use a fresh database first. Imports are additive, so switching source does not clear existing identities.
-
-Demonstrate a separate query photograph from a registered tiger, then a query of a withheld tiger. Review and register the withheld animal, then query it using a **different photograph**. An exact gallery image is explicitly flagged as a self-match. False matches are possible and should be reported honestly.
-
-### Similarity threshold and scope
-
-The identity score is the **maximum cosine similarity over that identity's reference images**. The best identity becomes a candidate when its score is **greater than or equal to** the threshold. Scores are not probabilities or confidence percentages.
-
-The initial threshold **0.6 is illustrative and uncalibrated**. For a defensible unknown-detection claim, choose the threshold using validation identities divided into registered and withheld groups. Measure false acceptance of withheld animals and false rejection of registered animals. Keep final-test data out of threshold selection. Changing the number of references or the model may require recalibration. The app provides manual threshold exploration, not an automated calibration experiment.
-
-This mutable gallery demo is separate from the study's fixed retrieval protocol. Its threshold-based decisions are not new research results and do not change the comparison tables. The UI uses the same `TigerViT`, 128D head, EXIF handling, 224×224 bicubic resize, and normalization as the existing evaluator. No pretrained-backbone baseline is mixed into this gallery.
-
-### Verify the addition
+To check the demo entry point and its software tests:
 
 ```powershell
-python run.py test --pattern test_demo.py
 python demo.py --help
+python run.py test --pattern test_demo.py
 ```
 
-Tests use synthetic features and images, including checkpoint-format loading, matching, persistence, duplicate rejection, import rollback, and held-out gallery selection. The Gradio callback test runs when the optional dependency is installed. Full GPU inference with your trained weights must be run on your machine.
+Full model inference with trained weights requires the checkpoint and dataset on your machine.
 
-## Repository structure
+## Repository layout
 
 | Path | Responsibility |
 |---|---|
 | `run.py` | Research pipeline entry point |
-| `demo.py` | Optional local Gradio gallery app |
-| `src/tiger_reid/` | Preparation, splits, datasets, models, losses, training, evaluation and plots |
+| `demo.py` | Launcher for the local Gradio identification app |
+| `src/tiger_reid/` | Data preparation, splits, models, loss functions, training, evaluation, plots, and Gradio implementation |
 | `tests/` | Synthetic software tests; no tiger download required |
 | `docs/` | Protocol, advanced usage, migration and reported results |
 | `data/train/`, `data/test/` | Your downloaded images **and their annotations** |
@@ -252,7 +292,7 @@ python run.py --data-dir "D:\datasets\atrw" --work-dir "D:\experiments\atrw" spl
 
 Use that same `--work-dir` for the remaining commands. You can inspect individual command options with `python run.py train --help`, etc.
 
-## Tests and existing results
+## Testing and reproducibility
 
 ```powershell
 python run.py test
@@ -264,17 +304,6 @@ Tests cover raw-data audits, fixed splits, sampling, metrics, training/proxy gra
 
 A snapshot of the completed study is documented separately in [docs/results.md](docs/results.md), including the stronger 768D pretrained reference. It is not a promise that another machine, split, or tuning configuration reproduces identical scores. New runs generate their own results under `artifacts/`.
 
-## Put the project on GitHub
-
-The ZIP contains one repository folder. Open a terminal inside it, then:
-
-```powershell
-git init
-git add .
-git status --short
-```
-
-Review the staged files before committing and adding your own remote. The checked ignore rules keep raw images/annotations, model checkpoints, generated outputs and virtual environments out of the repository. A custom output directory outside `artifacts/` must also be ignored if it is placed inside the repository.
 
 ## References
 
