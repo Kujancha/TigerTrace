@@ -1,0 +1,8 @@
+# Install a matching CUDA-enabled torch/torchvision pair FIRST; see README.
+# Leave an existing working GPU PyTorch installation in place.
+timm==1.0.30
+pytorch-metric-learning==2.9.0
+tqdm>=4.66,<5
+numpy>=1.26,<3
+Pillow>=10,<14
+matplotlib>=3.8,<4

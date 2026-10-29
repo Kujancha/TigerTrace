@@ -1,0 +1,44 @@
+# Raw datasets and annotations (download separately).
+/data/**
+!/data/README.md
+!/data/train/
+!/data/train/.gitkeep
+!/data/test/
+!/data/test/.gitkeep
+# Downloaded archives.
+/downloads/
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+# Generated work, models and feature stores.
+/artifacts/
+/prepared/
+/experiment/
+/runs/
+/pilot/
+/evaluation/
+/comparison/
+/pretrained_baseline/
+*.pt
+*.pth
+*.safetensors
+*.npz
+*.pkl
+# Python/environment/build files.
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+.env
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
